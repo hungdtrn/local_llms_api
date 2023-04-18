@@ -1,6 +1,6 @@
 from distutils.core import setup
 
-setup(name='local_llms',
+setup(name='local_llms_api',
       version='0.1.0',
       description='API Wrapper for local llms',
       author='Hung Tran',

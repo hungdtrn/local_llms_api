@@ -4,7 +4,6 @@ import json
 import uuid
 import time
 from typing import List, Optional, Literal, Union, Iterator, Dict
-from typing_extensions import TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +12,11 @@ from sse_starlette.sse import EventSourceResponse
 
 import torch
 import transformers
-from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer, StoppingCriteria as BaseStoppingCriteria, StoppingCriteriaList
+from transformers import GenerationConfig, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM, LlamaTokenizer, StoppingCriteria as BaseStoppingCriteria, StoppingCriteriaList
+from peft import PeftModel
 
-from src.api.llms.base import Base
-from .prompter import Prompter
+from src.server.llms.base import Base
+from .prompter import Prompter, Conversation, turn_to_message_array
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -28,11 +28,6 @@ try:
         device = "mps"
 except:  # noqa: E722
     pass
-
-class StoppingCriteria(BaseStoppingCriteria):
-    def __init__(self, stops=[]) -> None:
-        super().__init__()
-        self.stops = stops
         
 class StoppingCriteria(BaseStoppingCriteria):
     def __init__(self, stops=[]) -> None:
@@ -64,14 +59,37 @@ class StoppingCriteria(BaseStoppingCriteria):
         
         return input_ids
 
-
 class Model(Base):
-    def __init__(self, base_model) -> None:
-        tokenizer = LlamaTokenizer.from_pretrained(base_model, device_map="auto",)
-        model = LlamaForCausalLM.from_pretrained(
-            base_model,
-            device_map="auto",
-        )
+    def __init__(self, model_name: str, model_path: str, lora_path: str, load_in_8bit: bool) -> None:
+        if model_name == "llama":
+            tokenizer = LlamaTokenizer.from_pretrained(model_path, device_map="auto",)
+            model = LlamaForCausalLM.from_pretrained(
+                model_path,
+                device_map="auto",
+            )
+        elif model_name == "alpaca_lora":
+            tokenizer = LlamaTokenizer.from_pretrained(model_path)
+            model = LlamaForCausalLM.from_pretrained(
+                model_path,
+                load_in_8bit=load_in_8bit,
+                torch_dtype=torch.float16,
+                device_map="auto",
+            )
+
+            model = PeftModel.from_pretrained(
+                model,
+                lora_path,
+                torch_dtype=torch.float16,
+            )
+            
+            if not load_in_8bit:
+                model.half()  # seems to fix bugs for some users.
+        elif model_name == "huggingface":
+            tokenizer = AutoTokenizer.from_pretrained(model_path, device_map="auto",)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                device_map="auto",
+            )
 
         # unwind broken decapoda-research config
         model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
@@ -84,25 +102,25 @@ class Model(Base):
             
         self.model = model
         self.tokenizer = tokenizer
-        self.base_model = base_model
+        self.model_name = model_name
         self.embed_tokens = model.model.embed_tokens
         self.prompter = Prompter()
             
     def create_embedding(self, input: List[str]):
-        tokens = self.tokenizer(input[0], return_tensors="pt")
+        tokens = self.tokenizer(input, return_tensors="pt", padding=True)
         tokens_id = tokens["input_ids"].to(device)
-        embedding = self.embed_tokens(tokens_id)[0].mean(0)
+        embedding = self.embed_tokens(tokens_id).mean(-2)
         embedding = embedding.detach().cpu().tolist()
         return {
             "object": "list",
             "data": [
                 {
                     "object": "embedding",
-                    "embedding": embedding,
-                    "index": 0,
-                }
+                    "embedding": x,
+                    "index": i,
+                } for i, x in enumerate(embedding)
             ],
-            "model": self.base_model,
+            "model": self.model_name,
             "usage": {
                 "prompt_tokens": len(tokens),
                 "total_tokens": len(tokens),
@@ -135,7 +153,6 @@ class Model(Base):
         
         # Prepare the stopping criteria
         stops = [self.tokenizer(word, return_tensors="pt")["input_ids"][0, 1:].to(device) for word in stop]
-        # stops = []
         stopping_criteria = StoppingCriteriaList([StoppingCriteria(stops=stops)])        
         
         generation_config = GenerationConfig(
@@ -176,12 +193,11 @@ class Model(Base):
         if suffix is not None:
             output = output + suffix
         
-        # print(output)
         return {
             "id": completion_id,
             "object": "text_completion",
             "created": created,
-            "model": self.base_model,
+            "model": self.model_name,
             "choices": [
                 {
                     "text": output,
@@ -267,14 +283,14 @@ class Model(Base):
         max_tokens: int = 128,
         repeat_penalty: float = 1.1,
     ):
-        instructions = """Complete the following chat conversation between the user and the assistant. System messages should be strictly followed as additional instructions."""
-        chat_history = "\n".join(
-            f'{message["role"]} {message.get("user", "")}: {message["content"]}'
-            for message in messages
-        )
-        PROMPT = f" \n\n### Instructions:{instructions}\n\n### Inputs:{chat_history}\n\n### Response:\nassistant: "
-        PROMPT_STOP = ["###", "\nuser: ", "\nassistant: ", "\nsystem: "]
         
+        messages.append({"role": "assistant", "content": None})
+        conversation = Conversation(messages=turn_to_message_array(messages)) 
+        PROMPT = conversation.get_prompt()
+        # PROMPT_STOP = ["###", "\nuser: ", "\nassistant: ", "\nsystem: "]
+        PROMPT_STOP = []
+        print(PROMPT, PROMPT_STOP)
+
         completion_or_chunks = self.create_completion(prompt=PROMPT,
                                                       stop=PROMPT_STOP + stop,
                                                       temperature=temperature,

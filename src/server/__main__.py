@@ -1,10 +1,12 @@
+### This  implementation is inspired by python-llama-cpp (https://github.com/abetlen/llama-cpp-python)
+
 import os
 import json
 from typing import List, Optional, Literal, Union, Iterator, Dict
 from typing_extensions import TypedDict
 
-from src.api.llms import create_model
-import src.api.llms as llms
+from src.server.llms import create_model
+import src.server.llms as llms
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 
 def main(model, model_weight, lora_weight=""):
     app = FastAPI(
-        title="🦙 llama.cpp Python API",
+        title="API Wrapper for Local LLMs",
         version="0.0.1",
     )
     app.add_middleware(
@@ -100,7 +102,7 @@ def main(model, model_weight, lora_weight=""):
         class Config:
             schema_extra = {
                 "example": {
-                    "input": "The food was delicious and the waiter...",
+                    "input": ["The food was delicious and the waiter..."],
                 }
             }
 
@@ -142,9 +144,6 @@ def main(model, model_weight, lora_weight=""):
             schema_extra = {
                 "example": {
                     "messages": [
-                        ChatCompletionRequestMessage(
-                            role="system", content="You are a helpful assistant."
-                        ),
                         ChatCompletionRequestMessage(
                             role="user", content="What is the capital of France?"
                         ),
@@ -204,8 +203,8 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("model", help="Model to be used")
-    parser.add_argument("--model_weight", help="Path to the model weight")
-    parser.add_argument("--lora_weight", help="Path to the lora weight if the model use lora weight")
+    parser.add_argument("--model_path", help="Path to the model weight")
+    parser.add_argument("--lora_path", help="Path to the lora weight if the model use lora weight")
     args = parser.parse_args()
     
     app = main(args.model, args.model_weight, args.lora_weight)
