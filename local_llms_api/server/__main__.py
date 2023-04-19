@@ -53,7 +53,6 @@ def main(model, model_weight, lora_weight="", load8bit=False):
 
         # llama.cpp specific parameters
         top_k: int = 40
-        repeat_penalty: float = 1.1
 
         class Config:
             schema_extra = {
@@ -142,9 +141,6 @@ def main(model, model_weight, lora_weight="", load8bit=False):
         frequency_penalty: Optional[float] = 0
         logit_bias: Optional[Dict[str, float]] = Field(None)
         user: Optional[str] = Field(None)
-
-        # llama.cpp specific parameters
-        repeat_penalty: float = 1.1
 
         class Config:
             schema_extra = {

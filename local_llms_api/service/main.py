@@ -59,7 +59,8 @@ class LLMService:
                 "top_p": top_p,
                 "echo": echo, "stop": stop,
                 "stream": stream, "repeat_penalty": repeat_penalty,
-                "top_k": top_k
+                "top_k": top_k,
+                **kwargs
             }))
             
             if response.status_code != 200:
@@ -90,11 +91,10 @@ class LLMService:
                 "top_p": top_p,
                 "echo": echo, "stop": stop,
                 "stream": stream, "repeat_penalty": repeat_penalty,
-                "top_k": top_k
+                "top_k": top_k,
+                **kwargs
             }))
-            
-            print(response.json())
-            
+                        
             return converto_to_response_obj({"response": response.json()})
         elif self.llm_type == "openai":
             return converto_to_response_obj({"response":openai.ChatCompletion.create(

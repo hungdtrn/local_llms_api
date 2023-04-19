@@ -34,17 +34,23 @@ class StoppingCriteria(BaseStoppingCriteria):
         super().__init__()
         self.stops = stops
         
+    def __is_stop(self, input_ids, stop):
+        # count = int(len(stop) * 4 / 5)
+        count = len(stop) - 1
+        count = count if count > 0 else 0
+        if torch.sum(input_ids[0, -len(stop):] == stop) > count:
+            print(input_ids[0, -len(stop):], stop)
+            return True
+        
+        return False
+
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         for stop in self.stops:
             if len(stop) == 0:
                 continue
             
-            count = int(len(stop) * 2 / 3)
-            if torch.sum(input_ids[0, -len(stop):] == stop) > count:
+            if self.__is_stop(input_ids, stop):
                 return True
-            
-            # if torch.any(input_ids[0, -len(stop):] == stop):
-            #     return True
             
         return False
     
@@ -53,8 +59,7 @@ class StoppingCriteria(BaseStoppingCriteria):
             if len(stop) == 0:
                 continue
             
-            count = int(len(stop) * 2 / 3)
-            if torch.sum(input_ids[0, -len(stop):] == stop) > count:
+            if self.__is_stop(input_ids, stop):
                 return input_ids[:, :-len(stop)]
         
         return input_ids
@@ -144,12 +149,11 @@ class Model(Base):
         logprobs: Optional[int] = None,
         echo: bool = False,
         stop: List[str] = [],
-        repeat_penalty: float = 1.1,
         top_k: int = 40,
         stream: bool = False,
         output_scores: bool=False,
         repetition_penalty: float=1.2,
-        num_return_sequences: int=1
+        num_return_sequences: int=1,
         
     ):
         completion_id = f"cmpl-{str(uuid.uuid4())}"
@@ -166,25 +170,37 @@ class Model(Base):
         stops = [self.tokenizer(word, return_tensors="pt")["input_ids"][0, 1:].to(device) for word in stop]
         stopping_criteria = StoppingCriteriaList([StoppingCriteria(stops=stops)])        
         
-        generation_config = GenerationConfig(
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            repetition_penalty=repeat_penalty,
-            return_dict_in_generate=True,
-            output_scores=output_scores,
-            max_new_tokens=max_tokens,
-            stopping_criteria=stopping_criteria,
-            repetition_penalty=repetition_penalty,
-            num_return_sequences=num_return_sequences,
-        )
+        # generation_config = GenerationConfig(
+        #     temperature=temperature,
+        #     top_p=top_p,
+        #     top_k=top_k,
+        #     return_dict_in_generate=True,
+        #     output_scores=output_scores,
+        #     max_new_tokens=max_tokens,
+        #     stopping_criteria=stopping_criteria,
+        #     repetition_penalty=repetition_penalty,
+        #     num_return_sequences=num_return_sequences,
+        # )
+
+        generation_config = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "return_dict_in_generate": True,
+            "output_scores": output_scores,
+            "max_new_tokens":max_tokens,
+            "stopping_criteria": stopping_criteria,
+            "repetition_penalty": repetition_penalty,
+            "num_return_sequences": num_return_sequences,
+            "do_sample": True,
+        }
                 
         if stream:
             pass
         
         # Without streaming
         with torch.no_grad():
-            generation_output = self.model.generate(input_ids=input_ids, generation_config=generation_config)
+            generation_output = self.model.generate(input_ids=input_ids, **generation_config)
         # Remove stop words
         if len(stops) is not None:
             generation_output.sequences = StoppingCriteria(stops=stops).remove_stop_from_input(generation_output.sequences)
@@ -289,7 +305,6 @@ class Model(Base):
         stream: bool = False,
         stop: List[str] = [],
         max_tokens: int = 128,
-        repeat_penalty: float = 1.1,
         output_scores: bool=False,
         repetition_penalty: float=1.2,
         num_return_sequences: int=1
@@ -301,8 +316,7 @@ class Model(Base):
         PROMPT = conversation.get_prompt()
         # PROMPT_STOP = ["###", "\nuser: ", "\nassistant: ", "\nsystem: "]
         PROMPT_STOP = []
-        print(PROMPT, PROMPT_STOP)
-
+        
         completion_or_chunks = self.create_completion(prompt=PROMPT,
                                                       stop=PROMPT_STOP + stop,
                                                       temperature=temperature,
@@ -310,7 +324,6 @@ class Model(Base):
                                                       top_k=top_k,
                                                       stream=stream,
                                                       max_tokens=max_tokens,
-                                                      repeat_penalty=repeat_penalty,
                                                       output_scores=output_scores,
                                                       repetition_penalty=repetition_penalty,
                                                       num_return_sequences=num_return_sequences)
