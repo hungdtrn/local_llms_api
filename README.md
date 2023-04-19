@@ -1,7 +1,11 @@
 # API Wrapper for local LLMs
 This is a wrapper that enables local LLMs to work seamlessly with OpenAI-compatible clients (BabyAGI, Langchain,...).
+
 It is particularly useful for developers who wish to create their own LLM applications internally, since using the ChatGPT API can be costly.
 
+The repository consists of two components: an API server and a client. The API server loads a designated LLM and awaits requests from the client.
+
+The API client can be incorporated into other applications to establish communication with the server. 
 
 ## Installation
 
@@ -46,13 +50,13 @@ python -m local_llms_api.server  llama --model_path path_to_vicuna_weight
 
 ```
 
-#### Step 2: Use the APIService
-Example of using the APIService
+#### Step 2: Use the LLMClient
+Example of using the LLMClient
 
 ```
-from local_llms_api import LLMService
+from local_llms_api import LLMClient
 
-local_llm = LLMService(host="http://0.0.0.0:8000/v1")
+local_llm = LLMClient(host="http://0.0.0.0:8000/v1")
 
 # Sentence embedding:
 embedding = local_llm.create_embedding(["Hello"]).data[0].embedding
@@ -67,7 +71,7 @@ chat_completion = local_llm.create_chat_completion(messages= [{"role": "user", "
 **Note:** If you host the API server at a different machine with a different address, you need to replace "http://0.0.0.0:8000/v1" with your address.
 
 ### Example of using with LangChain
-The example of using this APIService with Langchain BabyAGI is provided in the `example/` folder. 
+The example of using this LLMClient with Langchain BabyAGI is provided in the `example/` folder. 
 
 ```
 # Install extra requirement for the Langchain example
