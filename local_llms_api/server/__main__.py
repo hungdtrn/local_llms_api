@@ -5,8 +5,8 @@ import json
 from typing import List, Optional, Literal, Union, Iterator, Dict
 from typing_extensions import TypedDict
 
-from src.server.llms import create_model
-import src.server.llms as llms
+from local_llms_api.server.llms import create_model
+import local_llms_api.server.llms as llms
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_path", help="Path to the lora weight if the model use lora weight")
     args = parser.parse_args()
     
-    app = main(args.model, args.model_weight, args.lora_weight)
+    app = main(args.model, args.model_path, args.lora_path)
 
     uvicorn.run(
         app, host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000))

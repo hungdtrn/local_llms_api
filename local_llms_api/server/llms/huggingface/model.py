@@ -15,7 +15,7 @@ import transformers
 from transformers import GenerationConfig, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM, LlamaTokenizer, StoppingCriteria as BaseStoppingCriteria, StoppingCriteriaList
 from peft import PeftModel
 
-from src.server.llms.base import Base
+from local_llms_api.server.llms.base import Base
 from .prompter import Prompter, Conversation, turn_to_message_array
 
 if torch.cuda.is_available():

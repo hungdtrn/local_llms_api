@@ -24,21 +24,21 @@ pip install -e .
 By default the APIs will be accessed via "http://0.0.0.0:8000/v1/". The documentation of the APIs is accessed via "http://0.0.0.0:8000/v1/docs#"
 
 ```
-python -m src.server.__main__ MODELNAME --model_path PATH_TO_MODEL_WEIGHT --lora_path PATH_TO_LORA_WEIGHT
+python -m src.server MODELNAME --model_path PATH_TO_MODEL_WEIGHT --lora_path PATH_TO_LORA_WEIGHT
 ```
 
 where:
 - MODELNAME: the name of the currently supported models. Currently the project only support Huggingface models. Possible model names are:
 1. [llama](https://huggingface.co/docs/transformers/main/model_doc/llama). With this model, you can load the weights of the recent LLMs that are finetuned from LLama (Koala, Vicuna, Alpaca, ...). An example of using alpaca model finetuned with GPT-4.
 ```
-python -m src.server.__main__  llama --model_path chavinlo/gpt4-x-alpaca
+python -m src.server  llama --model_path chavinlo/gpt4-x-alpaca
 ```
 
 
 2. [alpacalora](https://github.com/tloen/alpaca-lora). This is specifically loading the AlpacaLora model. Example of using this model:
 
 ```
-python -m src.server.__main__  llama --model_path decapoda-research/llama-13b-hf --lora_path chansung/alpaca-lora-13b
+python -m src.server  llama --model_path decapoda-research/llama-13b-hf --lora_path chansung/alpaca-lora-13b
 ```
 
 3. huggingface: Generic huggingface language models. It may take a while for huggingface to load this model. 

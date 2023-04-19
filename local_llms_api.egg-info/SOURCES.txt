@@ -1,0 +1,7 @@
+README.md
+setup.py
+local_llms_api/__init__.py
+local_llms_api.egg-info/PKG-INFO
+local_llms_api.egg-info/SOURCES.txt
+local_llms_api.egg-info/dependency_links.txt
+local_llms_api.egg-info/top_level.txt

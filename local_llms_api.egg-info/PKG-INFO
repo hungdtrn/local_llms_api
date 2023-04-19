@@ -1,5 +1,5 @@
 Metadata-Version: 2.1
-Name: local-llms
+Name: local-llms-api
 Version: 0.1.0
 Summary: API Wrapper for local llms
 Author: Hung Tran

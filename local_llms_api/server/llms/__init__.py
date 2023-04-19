@@ -1,5 +1,5 @@
 from .types import *
-from .model import Model as Model
+from .huggingface import Model as Model
 
 def get_default_weight(model):
     if model == "llama":
