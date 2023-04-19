@@ -25,7 +25,7 @@ def converto_to_response_obj(resp):
 
             
 
-class LLMService:
+class LLMClient:
     def __init__(self, host="http://0.0.0.0:8000/v1", llm_type="local", openai_model="gpt-3.5-turbo") -> None:
         if llm_type == "local":
             self.host = host
