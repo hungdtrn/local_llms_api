@@ -3,7 +3,7 @@ from collections import deque
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
 from langchain import LLMChain, PromptTemplate
-from custom_llm import CustomEmbeddings, CustomLLM
+from ..custom_llm import CustomEmbeddings, CustomLLM
 from langchain.llms import BaseLLM
 from langchain.vectorstores.base import VectorStore
 from pydantic import BaseModel, Field
@@ -63,7 +63,7 @@ def _get_top_tasks(vectorstore, query: str, k: int) -> List[str]:
 def execute_task(vectorstore, execution_chain: LLMChain, objective: str, task: str, k: int = 5) -> str:
     """Execute a task."""
     context = _get_top_tasks(vectorstore, query=objective, k=k)
-    print("In execute", objective, context)
+
     return execution_chain.run(objective=objective, context=context, task=task)
 
 class BabyAGI(Chain, BaseModel):
@@ -180,8 +180,8 @@ class BabyAGI(Chain, BaseModel):
             **kwargs
         )
         
-OBJECTIVE = "Prepare a plan for applying for an AI job for a PhD student in Australia"
-llm = CustomLLM(host=host, temperature=0)
+OBJECTIVE = "Prepare a plan for an international PhD student in Australia to apply for an AI job."
+llm = CustomLLM(host=host, temperature=0.1, top_p=0.9)
 verbose=False
 # If None, will keep on going forever
 max_iterations: Optional[int] = 3

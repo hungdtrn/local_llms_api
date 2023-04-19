@@ -1,0 +1,5 @@
+langchain
+python-dotenv
+openai
+faiss-cpu
+google-search-results

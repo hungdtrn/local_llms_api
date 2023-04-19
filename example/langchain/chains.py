@@ -9,7 +9,7 @@ from langchain.agents import ZeroShotAgent, Tool, AgentExecutor
 from langchain import SerpAPIWrapper, LLMChain
 from dotenv import load_dotenv
 
-from .custom_llm import CustomLLM
+from ..custom_llm import CustomLLM
 
 load_dotenv()
 host = os.getenv("HOST", "http://0.0.0.0:8000/v1")
@@ -61,7 +61,7 @@ class TaskPrioritizationChain(LLMChain):
 
 todo_prompt = PromptTemplate.from_template("You are a planner who is an expert at coming up with a todo list for a given objective. Come up with a todo list for this objective: {objective}")
 # todo_chain = LLMChain(llm=HuggingFaceHub(repo_id="decapoda-research/llama-7b-hf", model_kwargs={"temperature":0, "max_length":64}), prompt=todo_prompt)
-todo_chain = LLMChain(llm=CustomLLM(host=host, temperature=0), prompt=todo_prompt)
+todo_chain = LLMChain(llm=CustomLLM(host=host, temperature=0.1, top_p=0.9), prompt=todo_prompt)
 search = SerpAPIWrapper()
 tools = [
     Tool(

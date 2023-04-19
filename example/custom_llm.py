@@ -1,7 +1,7 @@
 from langchain.llms.base import LLM
 from langchain.embeddings.base import Embeddings
 from typing import Optional, List, Mapping, Any
-from local_llms_api import APIService
+from local_llms_api.service import LLMService
 
 class CustomLLM(LLM):
     host: str="http://0.0.0.0:8000/v1"
@@ -16,9 +16,17 @@ class CustomLLM(LLM):
         return "custom"
     
     def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        return APIService(host=self.host).create_completion(prompt=prompt, temperature=self.temperature, stop=stop,
+        if stop is None:
+            stop = []
+                        
+        return LLMService(host=self.host).create_chat_completion(messages=[{"role": "user", "content": prompt}], temperature=self.temperature, stop=stop,
                                          max_tokens=self.max_new_tokens, repeat_penalty=self.repeat_penalty,
-                                         top_p=self.top_p, top_k=self.top_k).response.choices[0].text.strip()
+                                         top_p=self.top_p, top_k=self.top_k).response.choices[0].message.content.strip()
+
+        # return LLMService(host=self.host).create_completion(prompt, temperature=self.temperature, stop=stop,
+        #                                  max_tokens=self.max_new_tokens, repeat_penalty=self.repeat_penalty,
+        #                                  top_p=self.top_p, top_k=self.top_k).response.choices[0].text.strip()
+
         
     @property
     def _identifying_params(self) -> Mapping[str, Any]:
@@ -38,11 +46,11 @@ class CustomEmbeddings(Embeddings):
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs."""
-        return [x.embedding for x in APIService(self.host).create_embedding(input=texts).data]
+        return [x.embedding for x in LLMService(self.host).create_embedding(input=texts).data]
 
     def embed_query(self, text: str) -> List[float]:
         """Embed query text."""
-        return APIService(self.host).create_embedding(input=[text]).data[0].embedding
+        return LLMService(self.host).create_embedding(input=[text]).data[0].embedding
 
     @property
     def _identifying_params(self) -> Mapping[str, Any]:
