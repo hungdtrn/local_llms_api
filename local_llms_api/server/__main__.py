@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, BaseSettings, Field, create_model_from_typeddict
 from sse_starlette.sse import EventSourceResponse
 
-def main(model, model_weight, lora_weight=""):
+def main(model, model_weight, lora_weight="", load8bit=False):
     app = FastAPI(
         title="API Wrapper for Local LLMs",
         version="0.0.1",
@@ -26,7 +26,7 @@ def main(model, model_weight, lora_weight=""):
         allow_headers=["*"],
     )
     
-    model = create_model(model, model_weight, lora_weight)
+    model = create_model(model, model_weight, lora_weight, load8bit=load8bit)
 
     class CreateCompletionRequest(BaseModel):
         prompt: Union[str, List[str]]
@@ -37,7 +37,10 @@ def main(model, model_weight, lora_weight=""):
         echo: bool = False
         stop: List[str] = []
         stream: bool = False
-
+        num_return_sequences: int=1
+        output_scores: bool=False
+        repetition_penalty: float=1.2
+        
         # ignored or currently unsupported
         model: Optional[str] = Field(None)
         n: Optional[int] = 1
@@ -55,7 +58,7 @@ def main(model, model_weight, lora_weight=""):
         class Config:
             schema_extra = {
                 "example": {
-                    "prompt": "\n\n### Instructions:\nWhat is the capital of France?\n\n### Response:\n",
+                    "prompt": ["What is the capital of France?"],
                     "stop": ["\n", "###"],
                 }
             }
@@ -128,6 +131,9 @@ def main(model, model_weight, lora_weight=""):
         stream: bool = False
         stop: List[str] = []
         max_tokens: int = 128
+        num_return_sequences: int=1
+        output_scores: bool=False
+        repetition_penalty: float=1.2
 
         # ignored or currently unsupported
         model: Optional[str] = Field(None)
@@ -205,9 +211,10 @@ if __name__ == "__main__":
     parser.add_argument("model", help="Model to be used")
     parser.add_argument("--model_path", help="Path to the model weight")
     parser.add_argument("--lora_path", help="Path to the lora weight if the model use lora weight")
+    parser.add_argument("--load8bit", help="Whether to load 8 bit", action='store_true', default=False)
     args = parser.parse_args()
     
-    app = main(args.model, args.model_path, args.lora_path)
+    app = main(args.model, args.model_path, args.lora_path, args.load8bit)
 
     uvicorn.run(
         app, host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000))

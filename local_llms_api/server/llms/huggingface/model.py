@@ -62,12 +62,16 @@ class StoppingCriteria(BaseStoppingCriteria):
 class Model(Base):
     def __init__(self, model_name: str, model_path: str, lora_path: str, load_in_8bit: bool) -> None:
         if model_name == "llama":
-            tokenizer = LlamaTokenizer.from_pretrained(model_path, device_map="auto",)
+            tokenizer = LlamaTokenizer.from_pretrained(model_path, 
+                                                       device_map="auto",
+                                                       load_in_8bit=load_in_8bit)
             model = LlamaForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
+                load_in_8bit=load_in_8bit
             )
-        elif model_name == "alpaca_lora":
+            self.embed_tokens = model.model.embed_tokens    
+        elif model_name == "alpacalora":
             tokenizer = LlamaTokenizer.from_pretrained(model_path)
             model = LlamaForCausalLM.from_pretrained(
                 model_path,
@@ -84,12 +88,16 @@ class Model(Base):
             
             if not load_in_8bit:
                 model.half()  # seems to fix bugs for some users.
+                
+            self.embed_tokens = model.model.model.embed_tokens    
+            
         elif model_name == "huggingface":
             tokenizer = AutoTokenizer.from_pretrained(model_path, device_map="auto",)
             model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
             )
+            self.embed_tokens = model.model.embed_tokens    
 
         # unwind broken decapoda-research config
         model.config.pad_token_id = tokenizer.pad_token_id = 0  # unk
@@ -103,7 +111,6 @@ class Model(Base):
         self.model = model
         self.tokenizer = tokenizer
         self.model_name = model_name
-        self.embed_tokens = model.model.embed_tokens
         self.prompter = Prompter()
             
     def create_embedding(self, input: List[str]):
@@ -140,6 +147,10 @@ class Model(Base):
         repeat_penalty: float = 1.1,
         top_k: int = 40,
         stream: bool = False,
+        output_scores: bool=False,
+        repetition_penalty: float=1.2,
+        num_return_sequences: int=1
+        
     ):
         completion_id = f"cmpl-{str(uuid.uuid4())}"
         created = int(time.time())
@@ -159,24 +170,21 @@ class Model(Base):
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            repetition_penalty=repeat_penalty
+            repetition_penalty=repeat_penalty,
+            return_dict_in_generate=True,
+            output_scores=output_scores,
+            max_new_tokens=max_tokens,
+            stopping_criteria=stopping_criteria,
+            repetition_penalty=repetition_penalty,
+            num_return_sequences=num_return_sequences,
         )
-        
-        generate_params = {
-            "input_ids": input_ids,
-            "generation_config": generation_config,
-            "return_dict_in_generate": True,
-            "output_scores": True,
-            "max_new_tokens": max_tokens,
-            "stopping_criteria": stopping_criteria,
-        }
-        
+                
         if stream:
             pass
         
         # Without streaming
         with torch.no_grad():
-            generation_output = self.model.generate(**generate_params)
+            generation_output = self.model.generate(input_ids=input_ids, generation_config=generation_config)
         # Remove stop words
         if len(stops) is not None:
             generation_output.sequences = StoppingCriteria(stops=stops).remove_stop_from_input(generation_output.sequences)
@@ -282,6 +290,10 @@ class Model(Base):
         stop: List[str] = [],
         max_tokens: int = 128,
         repeat_penalty: float = 1.1,
+        output_scores: bool=False,
+        repetition_penalty: float=1.2,
+        num_return_sequences: int=1
+
     ):
         
         messages.append({"role": "assistant", "content": None})
@@ -298,7 +310,10 @@ class Model(Base):
                                                       top_k=top_k,
                                                       stream=stream,
                                                       max_tokens=max_tokens,
-                                                      repeat_penalty=repeat_penalty,)
+                                                      repeat_penalty=repeat_penalty,
+                                                      output_scores=output_scores,
+                                                      repetition_penalty=repetition_penalty,
+                                                      num_return_sequences=num_return_sequences)
         
         if stream:
             chunks = completion_or_chunks

@@ -11,7 +11,7 @@ def get_default_weight(model):
     else:
         raise Exception("Model not implemented")
 
-def create_model(model, weight, lora_weights, **kwargs):
+def create_model(model, weight, lora_weights, load8bit, **kwargs):
     """ The currently support models are llama, alpacalora, and generic huggingface models.
     Both models are loaded from huggingface. 
     """
@@ -22,4 +22,4 @@ def create_model(model, weight, lora_weights, **kwargs):
     lora_weights = lora_weights if lora_weights is not None else default_lora_weights
     
     return Model(model_name=model, model_path=weight, lora_path=lora_weights,
-                 load_in_8bit=True)
+                 load_in_8bit=load8bit)
