@@ -1,6 +1,6 @@
 # API Wrapper for local LLMs
 API wrapper that makes local LLMs compatible with OpenAI compatible clients (e.g., BabyAGI, LangeChain)
-This is suitable for developers who want to build in-house services (since ChatGPT API is expensive).
+This is suitable for developers who want to build in-house LLM API services (since ChatGPT API is expensive).
 
 
 
