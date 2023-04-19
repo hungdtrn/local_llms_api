@@ -13,3 +13,6 @@ gradio
 uvicorn
 fastapi
 sse-starlette
+langchain
+python-dotenv
+openai
