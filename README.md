@@ -80,8 +80,7 @@ cp example/langchain/.env.example example/langchain/.env
 # UPDATE FILE .env, add your SERPAPI_API_KEY and HOST
 
 # Run the example code
-python -m example.langchain.baby_agi
-
+python -m example.langchain.simple_example
 ```
 
 ### Documentation
