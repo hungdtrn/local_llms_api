@@ -20,24 +20,19 @@ class Embedding(TypedDict):
     usage: EmbeddingUsage
 
 
-class CompletionLogprobs(TypedDict):
-    text_offset: List[int]
-    token_logprobs: List[float]
-    tokens: List[str]
-    top_logprobs: List[Dict[str, float]]
 
 
 class CompletionChoice(TypedDict):
     text: str
     index: int
-    logprobs: Optional[CompletionLogprobs]
+    logprob: Optional[float]
     finish_reason: Optional[str]
 
 
 class CompletionUsage(TypedDict):
     prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
+    completion_tokens: List[int]
+    total_tokens: List[int]
 
 
 class CompletionChunk(TypedDict):

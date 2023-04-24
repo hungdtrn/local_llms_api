@@ -5,7 +5,7 @@ import json
 from typing import List, Optional, Literal, Union, Iterator, Dict
 from typing_extensions import TypedDict
 
-from local_llms_api.server.llms import create_model
+from local_llms_api.server.llms import create_model, create_embedding_model
 import local_llms_api.server.llms as llms
 
 from fastapi import FastAPI
@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, BaseSettings, Field, create_model_from_typeddict
 from sse_starlette.sse import EventSourceResponse
 
-def main(model, model_weight, lora_weight="", load8bit=False):
+def main(model, model_weight, lora_weight="", load8bit=False, separate_embedding=False, embedding_weight="intfloat/e5-base"):
     app = FastAPI(
         title="API Wrapper for Local LLMs",
         version="0.0.1",
@@ -26,12 +26,15 @@ def main(model, model_weight, lora_weight="", load8bit=False):
         allow_headers=["*"],
     )
     
+    embedding_model = None
+    if separate_embedding:
+        embedding_model = create_embedding_model(embedding_weight, load8bit)
     model = create_model(model, model_weight, lora_weight, load8bit=load8bit)
 
     class CreateCompletionRequest(BaseModel):
         prompt: Union[str, List[str]]
-        suffix: Optional[str] = Field(None)
         max_tokens: int = 16
+        do_sample: bool = True
         temperature: float = 0.8
         top_p: float = 0.95
         echo: bool = False
@@ -40,19 +43,20 @@ def main(model, model_weight, lora_weight="", load8bit=False):
         num_return_sequences: int=1
         output_scores: bool=False
         repetition_penalty: float=1.2
+        seed: int = -1
+        add_bos_token: bool = True
+        truncation_length: int = 2048
+        ban_eos_token: bool = False
+        skip_special_tokens: bool = True
+        use_cache: bool = True
         
-        # ignored or currently unsupported
-        model: Optional[str] = Field(None)
-        n: Optional[int] = 1
+        
         logprobs: Optional[int] = Field(None)
         presence_penalty: Optional[float] = 0
         frequency_penalty: Optional[float] = 0
         best_of: Optional[int] = 1
         logit_bias: Optional[Dict[str, float]] = Field(None)
         user: Optional[str] = Field(None)
-
-        # llama.cpp specific parameters
-        top_k: int = 40
 
         class Config:
             schema_extra = {
@@ -115,8 +119,11 @@ def main(model, model_weight, lora_weight="", load8bit=False):
         response_model=CreateEmbeddingResponse,
     )
     def create_embedding(request: CreateEmbeddingRequest):
-        return model.create_embedding(**request.dict(exclude={"model", "user", "encoding_format"}))
-
+        if not separate_embedding:
+            return model.create_embedding(**request.dict(exclude={"model", "user", "encoding_format"}))
+        else:
+            return embedding_model.create_embedding(**request.dict(exclude={"model", "user", "encoding_format"}))
+        
     class ChatCompletionRequestMessage(BaseModel):
         role: Union[Literal["system"], Literal["user"], Literal["assistant"]]
         content: str
@@ -208,9 +215,12 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", help="Path to the model weight")
     parser.add_argument("--lora_path", help="Path to the lora weight if the model use lora weight")
     parser.add_argument("--load8bit", help="Whether to load 8 bit", action='store_true', default=False)
+    parser.add_argument("--separate_embedding", help="Whether to load another model for embedding", action='store_true', default=False)
+    parser.add_argument("--embedding_path", help="Path to the additional embedding model", default='intfloat/e5-base')
+
     args = parser.parse_args()
     
-    app = main(args.model, args.model_path, args.lora_path, args.load8bit)
+    app = main(args.model, args.model_path, args.lora_path, args.load8bit, args.separate_embedding, args.embedding_path)
 
     uvicorn.run(
         app, host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000))

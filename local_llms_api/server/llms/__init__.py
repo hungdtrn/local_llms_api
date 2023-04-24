@@ -1,5 +1,5 @@
 from .types import *
-from .huggingface import Model as Model
+from .huggingface import LLMModel, EmbeddingModel
 
 def get_default_weight(model):
     if model == "llama":
@@ -21,5 +21,8 @@ def create_model(model, weight, lora_weights, load8bit, **kwargs):
     weight = weight if weight is not None else default_weight
     lora_weights = lora_weights if lora_weights is not None else default_lora_weights
     
-    return Model(model_name=model, model_path=weight, lora_path=lora_weights,
+    return LLMModel(model_name=model, model_path=weight, lora_path=lora_weights,
                  load_in_8bit=load8bit)
+
+def create_embedding_model(weight, load8bit, **kwargs):
+    return EmbeddingModel(weight, load8bit=load8bit)

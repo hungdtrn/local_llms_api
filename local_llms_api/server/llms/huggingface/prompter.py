@@ -52,7 +52,13 @@ class Prompter(object):
         return res
 
     def get_response(self, output: str) -> str:
-        return output.split(self.template["response_split"])[1].strip()
+        idx = output.rfind(self.template["response_split"])
+        if idx == -1:
+            idx = 0
+        else:
+            idx = idx + len(self.template["response_split"])
+            
+        return output[idx:].strip(), idx
 
 class SeparatorStyle(Enum):
     """Different separator style."""

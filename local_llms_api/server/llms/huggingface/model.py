@@ -4,6 +4,8 @@ import json
 import uuid
 import time
 from typing import List, Optional, Literal, Union, Iterator, Dict
+import gc
+from accelerate import dispatch_model
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,12 +13,15 @@ from pydantic import BaseModel, BaseSettings, Field, create_model_from_typeddict
 from sse_starlette.sse import EventSourceResponse
 
 import torch
+from torch import Tensor
 import transformers
-from transformers import GenerationConfig, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM, LlamaTokenizer, StoppingCriteria as BaseStoppingCriteria, StoppingCriteriaList
+from transformers import GenerationConfig, AutoTokenizer, AutoModelForCausalLM, LlamaForCausalLM, LlamaTokenizer, StoppingCriteria as BaseStoppingCriteria, StoppingCriteriaList, AutoModel
 from peft import PeftModel
-
+import numpy as np
 from local_llms_api.server.llms.base import Base
 from .prompter import Prompter, Conversation, turn_to_message_array
+# Import math Library
+import math 
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -64,7 +69,8 @@ class StoppingCriteria(BaseStoppingCriteria):
         
         return input_ids
 
-class Model(Base):
+
+class LLMModel(Base):
     def __init__(self, model_name: str, model_path: str, lora_path: str, load_in_8bit: bool) -> None:
         if model_name == "llama":
             tokenizer = LlamaTokenizer.from_pretrained(model_path, 
@@ -138,23 +144,43 @@ class Model(Base):
                 "total_tokens": len(tokens),
             },
         }
+
+            
+    def encode(self, text, add_special_tokens=True, add_bos_token=True, truncation_length=None):
+        # Tokenize the prompt
+        inputs = self.tokenizer(text, return_tensors="pt", add_special_tokens=add_special_tokens)
+        input_ids = inputs["input_ids"]
+        
+        if not add_bos_token and input_ids[0][0] == self.tokenizer.bos_token_id:
+            input_ids = input_ids[:, 1:]
+
+        # Llama adds this extra token when the first character is '\n', and this
+        # compromises the stopping criteria, so we just remove it
+        if type(self.tokenizer) is transformers.LlamaTokenizer and input_ids[0][0] == 29871:
+            input_ids = input_ids[:, 1:]
+
+        # Handling truncation
+        if truncation_length is not None:
+            input_ids = input_ids[:, -truncation_length:]
+
+        input_ids = inputs["input_ids"].to(device)
+        
+        return input_ids
    
     def create_completion(
         self,
         prompt: str,
-        suffix: Optional[str] = None,
-        max_tokens: int = 128,
-        temperature: float = 0.8,
-        top_p: float = 0.95,
-        logprobs: Optional[int] = None,
-        echo: bool = False,
         stop: List[str] = [],
-        top_k: int = 40,
         stream: bool = False,
-        output_scores: bool=False,
-        repetition_penalty: float=1.2,
-        num_return_sequences: int=1,
-        
+        max_tokens: int = 128,
+        add_special_tokens: bool = True,
+        add_bos_token: bool = True,
+        truncation_length: int = 2048,
+        echo: bool = False,
+        seed: int = -1,
+        ban_eos_token: bool = True,
+        skip_special_tokens: bool = True,
+        **kwargs
     ):
         completion_id = f"cmpl-{str(uuid.uuid4())}"
         created = int(time.time())
@@ -162,60 +188,53 @@ class Model(Base):
         # Prepare the prompt
         prompt = self.prompter.generate_prompt(prompt)
         
-        # Tokenize the prompt
-        inputs = self.tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs["input_ids"].to(device)
+        input_ids = self.encode(prompt, add_special_tokens=add_special_tokens, 
+                                add_bos_token=add_bos_token, truncation_length=truncation_length)
         
         # Prepare the stopping criteria
-        stops = [self.tokenizer(word, return_tensors="pt")["input_ids"][0, 1:].to(device) for word in stop]
+        stops = [self.encode(word, add_special_tokens=False)[0] for word in stop]
+        
         stopping_criteria = StoppingCriteriaList([StoppingCriteria(stops=stops)])        
         
-        # generation_config = GenerationConfig(
-        #     temperature=temperature,
-        #     top_p=top_p,
-        #     top_k=top_k,
-        #     return_dict_in_generate=True,
-        #     output_scores=output_scores,
-        #     max_new_tokens=max_tokens,
-        #     stopping_criteria=stopping_criteria,
-        #     repetition_penalty=repetition_penalty,
-        #     num_return_sequences=num_return_sequences,
-        # )
-
         generation_config = {
-            "temperature": temperature,
-            "top_p": top_p,
-            "top_k": top_k,
             "return_dict_in_generate": True,
-            "output_scores": output_scores,
-            "max_new_tokens":max_tokens,
             "stopping_criteria": stopping_criteria,
-            "repetition_penalty": repetition_penalty,
-            "num_return_sequences": num_return_sequences,
-            "do_sample": True,
+            "max_new_tokens": max_tokens + input_ids.shape[-1],
         }
+        
+        if ban_eos_token:
+            generation_config["suppress_tokens"] = [self.tokenizer.eos_token_id]
+        
+        generation_config.update(kwargs)
                 
         if stream:
             pass
         
         # Without streaming
+        print(generation_config)
         with torch.no_grad():
             generation_output = self.model.generate(input_ids=input_ids, **generation_config)
-        # Remove stop words
-        if len(stops) is not None:
-            generation_output.sequences = StoppingCriteria(stops=stops).remove_stop_from_input(generation_output.sequences)
-
-        s = generation_output.sequences[0]
         
-        output = self.tokenizer.decode(s)
+        promptlen = input_ids.shape[-1]
+        generated_sequences = generation_output.sequences
 
-        output = self.prompter.get_response(output)
-                
-        if echo:
-            output = prompt + output
-            
-        if suffix is not None:
-            output = output + suffix
+        output_sequence, start_idx = list(zip(*[self.prompter.get_response(x) for x in self.tokenizer.batch_decode(generated_sequences, skip_special_tokens=skip_special_tokens)]))
+        scores = generation_output.scores
+        
+        if scores is None:
+            logprobs = [None for i in range(len(output_sequence))]
+        else:
+            vocab_log_probs = torch.stack(scores, dim=1).log_softmax(-1)  # [n, length, vocab_size]
+            token_log_probs = torch.gather(vocab_log_probs, 2, generated_sequences[:, promptlen:, None]).squeeze(-1).tolist()  # [n, length]
+            logprobs = [np.mean(token_log_probs[i]) for i in range(kwargs['num_return_sequences'])]
+            logprobs = [score if not math.isinf(score) else -99999 for score in logprobs]
+        
+        prompt_len = input_ids.shape[-1]
+        out_len = [x.shape[-1] for x in generated_sequences]
+        del input_ids
+        del generation_output
+        gc.collect()
+        torch.cuda.empty_cache()
         
         return {
             "id": completion_id,
@@ -225,15 +244,15 @@ class Model(Base):
             "choices": [
                 {
                     "text": output,
-                    "index": 0,
-                    "logprobs": None,
+                    "index": i,
+                    "logprob":  score,
                     "finish_reason": None,
                 }
-            ],
+            for i, (output, score) in enumerate(zip(output_sequence, logprobs))],
             "usage": {
-                "prompt_tokens": len(input_ids[0]),
-                "completion_tokens": len(s),
-                "total_tokens": len(input_ids[0]) + len(s),
+                "prompt_tokens": prompt_len,
+                "completion_tokens": [x for x in out_len],
+                "total_tokens": [prompt_len + x for x in out_len],
             },
         }
     
@@ -334,3 +353,44 @@ class Model(Base):
         else:
             completion = completion_or_chunks
             return self._convert_text_completion_to_chat(completion)
+        
+
+class EmbeddingModel:
+    def __init__(self, model_path: str, load8bit: bool) -> None:
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path, load_in_8bit=load8bit, device_map='auto')
+        self.model = AutoModel.from_pretrained(model_path, load_in_8bit=load8bit).to("cuda")
+        
+        self.model = dispatch_model(self.model, device_map='auto')
+
+        self.model_path = model_path
+
+    def average_pool(self, last_hidden_states: Tensor,
+                    attention_mask: Tensor) -> Tensor:
+        last_hidden = last_hidden_states.masked_fill(~attention_mask[..., None].bool(), 0.0)
+        return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
+
+    def create_embedding(self, input: List[str]):
+        batch_dict = self.tokenizer(input, return_tensors="pt", padding=True)
+        for k in batch_dict.keys():
+            batch_dict[k] = batch_dict[k].to(self.model.device)
+
+        outputs = self.model(**batch_dict)
+        embeddings = self.average_pool(outputs.last_hidden_state, batch_dict['attention_mask'])
+        embeddings = embeddings.detach().cpu().tolist()
+
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "object": "embedding",
+                    "embedding": x,
+                    "index": i,
+                } for i, x in enumerate(embeddings)
+            ],
+            "model": self.model_path,
+            "usage": {
+                "prompt_tokens": 0,
+                "total_tokens": 0,
+            },
+        }
+        

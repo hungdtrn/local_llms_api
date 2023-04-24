@@ -43,7 +43,7 @@ Example
 python -m local_llms_api.server  llama --model_path chavinlo/gpt4-x-alpaca
 
 # Alpaca lora
-python -m local_llms_api.server  llama --model_path decapoda-research/llama-13b-hf --lora_path chansung/alpaca-lora-13b --load8bit
+python -m local_llms_api.server  alapcalora --model_path decapoda-research/llama-13b-hf --lora_path chansung/alpaca-lora-13b --load8bit
 
 # Local model (e.g., vicuna weights)
 python -m local_llms_api.server  llama --model_path path_to_vicuna_weight

@@ -5,11 +5,24 @@ from local_llms_api.client import LLMClient
 
 class CustomLLM(LLM):
     host: str="http://0.0.0.0:8000/v1"
-    temperature: float=0.7
-    max_new_tokens: int=256
-    repeat_penalty: float=1.1
-    top_p: float=1
-    top_k: float=40
+    max_tokens: int = 16
+    do_sample: bool = True
+    temperature: float = 0.8
+    top_p: float = 0.95
+    echo: bool = False
+    stop: List[str] = []
+    stream: bool = False
+    num_return_sequences: int=1
+    output_scores: bool=False
+    repetition_penalty: float=1.2
+    top_k: int = 1
+    num_beams: int = 1
+    seed: int = -1
+    add_bos_token: bool = True
+    truncation_length: int = 2048
+    ban_eos_token: bool = False
+    skip_special_tokens: bool = True
+    use_cache: bool = True
 
     @property
     def _llm_type(self) -> str:
@@ -19,13 +32,31 @@ class CustomLLM(LLM):
         if stop is None:
             stop = []
                         
-        return LLMClient(host=self.host).create_chat_completion(messages=[{"role": "user", "content": prompt}], temperature=self.temperature, stop=stop,
-                                         max_tokens=self.max_new_tokens, repeat_penalty=self.repeat_penalty,
-                                         top_p=self.top_p, top_k=self.top_k).response.choices[0].message.content.strip()
-
-        # return LLMClient(host=self.host).create_completion(prompt, temperature=self.temperature, stop=stop,
+        # return LLMClient(host=self.host).create_chat_completion(messages=[{"role": "user", "content": prompt}], temperature=self.temperature, stop=stop,
         #                                  max_tokens=self.max_new_tokens, repeat_penalty=self.repeat_penalty,
-        #                                  top_p=self.top_p, top_k=self.top_k).response.choices[0].text.strip()
+        #                                  top_p=self.top_p, top_k=self.top_k).response.choices[0].message.content.strip()
+
+        out = LLMClient(host=self.host).create_completion(prompt, 
+                                                           max_tokens=self.max_tokens,
+                                                           do_sample=self.do_sample,
+                                                           temperature=self.temperature,
+                                                           top_p=self.top_p,
+                                                           echo=self.echo,
+                                                           stop=self.stop,
+                                                           stream=self.stream,
+                                                           num_return_sequences=self.num_return_sequences,
+                                                           output_scores=self.output_scores,
+                                                           repetition_penalty=self.repetition_penalty,
+                                                           top_k=self.top_k,
+                                                           num_beams=self.num_beams,
+                                                           seed=self.seed,
+                                                           add_bos_token=self.add_bos_token,
+                                                           truncation_length=self.truncation_length,
+                                                           ban_eos_token=self.ban_eos_token,
+                                                           skip_special_tokens=self.skip_special_tokens,
+                                                           use_cache=self.use_cache).response.choices
+        print(out)
+        return out[0].text.strip()
 
         
     @property
